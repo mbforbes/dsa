@@ -1,8 +1,19 @@
 """Kadane's algorithm for finding the maximum sum sub-array in O(n)."""
 
+from typing import Optional
 
-def kadane(xs):
-    """returns (best_start, best_end (inclusive!), best_sum)"""
+
+def kadane_no_indices(xs: list[int]) -> Optional[int]:
+    """easy mode: just returns best sum (or None if empty)"""
+    best_sum, cur_sum = None, 0
+    for x in xs:
+        cur_sum = max(cur_sum + x, x)  # continue or restart
+        best_sum = max(best_sum, cur_sum) if best_sum is not None else cur_sum
+    return best_sum
+
+
+def kadane(xs: list[int]) -> tuple[int, int, Optional[int]]:
+    """returns (best_start, best_end (inclusive!), best_sum | None if empty)"""
     cur_start, cur_end = 0, 0
     best_start, best_end = 0, 0
     cur_sum = 0
@@ -35,6 +46,7 @@ def main() -> None:
     print(f"    = sum({a[best_start : best_end + 1]})")
     print(f"    = {sum(a[best_start : best_end + 1])}")
     print(f"    = {best_sum}")
+    print(f"    = {kadane_no_indices(a)}")
 
 
 if __name__ == "__main__":
