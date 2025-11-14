@@ -3,5 +3,5 @@ name = "dsa"
 version = "0.1.0"
 description = "Data structures and algorithms, implemented from scratch for fun, study, and practice."
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = []
+requires-python = ">=3.14"
+dependencies = ["numpy>=2.3.4"]
