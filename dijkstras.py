@@ -1,5 +1,4 @@
-# import heapq
-
+import heapq
 from typing import Optional
 
 import networkx as nx
@@ -15,20 +14,25 @@ DARK_GREEN = "#15803d"
 BLUE = "#22D3EE"
 
 
-def pop_min(
-    distances: dict[str, float], remaining: set[str]
-) -> tuple[str, float]:
-    min_node = None
-    min_dist = float("inf")
-    for node in remaining:
-        dist = distances[node]
-        if dist < min_dist:
-            min_node = node
-            min_dist = dist
-    if min_node is None:
-        raise ValueError(f"No node had non-inf dist: {distances}")
-    remaining.remove(min_node)
-    return min_node, min_dist
+def get_path(previous: dict[str, Optional[str]], end: str) -> list[str]:
+    rev_path = []
+    cur = end
+    while cur is not None:
+        rev_path.append(cur)
+        cur = previous[cur]
+    return list(reversed(rev_path))
+
+
+class HeapNode:
+    __slots__ = ["name", "dist"]
+
+    def __init__(self, name: str, dist: float):
+        self.name = name
+        self.dist = dist
+
+    def __lt__(self, other: "HeapNode"):
+        """Only comparison required to support heap operations."""
+        return self.dist < other.dist
 
 
 def dijkstra(
@@ -48,19 +52,25 @@ def dijkstra(
         visualizer: GraphVisualizer instance for rendering
         output_dir: Directory to save visualization frames
     """
-    distances = {
-        node: (float("inf") if node != start else 0) for node in graph.nodes()
-    }
-    previous: dict[str, Optional[str]] = {
-        node: None for node in graph.nodes()
-    }
-    remaining = set(graph.nodes())
-    finished = set()
-    # TODO: update elements in python's heapq by in-place writes and then sort? but
-    # how to lookup by name?
-    while len(remaining) > 0:
-        node, dist = pop_min(distances, remaining)
+    distances: dict[str, float] = {start: 0}
+    previous: dict[str, Optional[str]] = {start: None}
+    # python's heapq doesn't support lookup by index or (publicly) decrease-key. but we
+    # can add duplicates when a shorter path is found, and it will be popped first.
+    # ignore any already-popped nodes later on. O(E) <= O(V^2) heap size with
+    # duplicates, but as heap operations are log(n), log(V^2) = 2log(V). so operating on
+    # a heap with V^2 entries is still big-O like operating on V entries, because log
+    # dominates the polynomial so hard.
+    heap: list[HeapNode] = [HeapNode(start, 0)]
+    finished: set[str] = set()
+    while len(heap) > 0:
+        heap_node = heapq.heappop(heap)
+        node, dist = heap_node.name, heap_node.dist
 
+        # allowing heap duplicates for lowering key (see above)
+        if node in finished:
+            continue
+
+        assert dist == distances[node]
         finished.add(node)
 
         # draw node
@@ -70,7 +80,8 @@ def dijkstra(
             prefix="dijkstra",
             node_colors={**{n: DARK_GREEN for n in finished}, node: GREEN},
             node_labels={
-                node: f"{node}\n{distances[node]}" for node in graph.nodes()
+                node: f"{node}\n{distances[node] if node in distances else ''}"
+                for node in graph.nodes()
             },
             edge_colors={
                 (n, p): DARK_GREEN
@@ -80,14 +91,14 @@ def dijkstra(
             title=f"Considering: {node}",
         )
 
-        # stop early once end found
+        # optional: stop early once end found
         if node == end:
             break
 
         for neighbor, edge in graph[node].items():
-            # I think we don't need to consider paths to neighbors if they're already
-            # finished because we're guaranteed to already have the shortest path
-            # to them.
+            # we don't need to consider paths to neighbors if they're already
+            # finished because we're guaranteed to already have the shortest
+            # path to them.
             if neighbor in finished:
                 continue
             weight = edge["weight"]
@@ -112,7 +123,7 @@ def dijkstra(
                     **{(node, neighbor): BLUE},
                 },
                 node_labels={
-                    node: f"{node}\n{distances[node]}"
+                    node: f"{node}\n{distances[node] if node in distances else ''}"
                     for node in graph.nodes()
                 },
                 edge_labels={
@@ -120,13 +131,19 @@ def dijkstra(
                         node,
                         neighbor,
                     ): f"is {neighbor_dist} < {distances[neighbor]} ?"
+                    if neighbor in distances
+                    else f"new: {neighbor_dist}"
                 },
                 title=f"Considering: {node} → {neighbor}",
             )
 
-            if distances[neighbor] > neighbor_dist:
+            if (
+                neighbor not in distances
+                or neighbor_dist < distances[neighbor]
+            ):
                 distances[neighbor] = neighbor_dist
                 previous[neighbor] = node
+                heapq.heappush(heap, HeapNode(neighbor, neighbor_dist))
 
         display = sorted(
             (
@@ -152,19 +169,15 @@ def dijkstra(
                 },
             },
             node_labels={
-                node: f"{node}\n{distances[node]}" for node in graph.nodes()
+                node: f"{node}\n{distances[node] if node in distances else ''}"
+                for node in graph.nodes()
             },
             edge_labels={},
             title=f"What next? Choose smallest in queue. Available:\n{', '.join([f'({d[0]}: {d[1]})' for d in display])}",
         )
 
-    # Show final path
-    rev_path = []
-    cur = end
-    while cur is not None:
-        rev_path.append(cur)
-        cur = previous[cur]
-    path = list(reversed(rev_path))
+    # Show final shortest path from start to end
+    path = get_path(previous, end)
     arrows = [(path[i], path[i + 1]) for i in range(len(path) - 1)]
     visualizer.save_frame(
         output_dir=output_dir,
@@ -182,17 +195,22 @@ def main() -> None:
     seed = 5
 
     # Choose graph
-    # graph, name = create_fixed_graph(), "example"
-    graph, name = (
-        create_random_graph(num_nodes=7, seed=seed),
-        f"random-{seed}",
-    )
+    graph, name = create_fixed_graph(), "example"
+    # graph, name = (
+    #     create_random_graph(num_nodes=7, seed=seed),
+    #     f"random-{seed}",
+    # )
     viz = GraphVisualizer(graph, name, layout="spring")
     output_dir = "output/dijkstra/"
 
-    start_node = list(graph.nodes())[0]
-    end_node = "E" if name == "example" else list(graph.nodes())[-1]
-    dijkstra(graph, start_node, end_node, viz, output_dir=output_dir)
+    start = list(graph.nodes())[0]
+    end = "E" if name == "example" else list(graph.nodes())[-1]
+    distances, previous = dijkstra(
+        graph, start, end, viz, output_dir=output_dir
+    )
+    print("Distances:", distances)
+    print("Previous:", previous)
+    print("Path:", get_path(previous, end))
     print(f"Frames for {name} graph saved to: {output_dir}")
 
 
