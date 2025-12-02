@@ -4,7 +4,7 @@ How it works:
 - have fixed capacity
 - expand (double) if adding and full
 - head (h) points to top of queue/stack
-- tail (t) points to first open slot at end
+- tail (t) points to first open slot at end (from head going right & wrapping)
 - if head == tail, buffer is either full or empty
 - so, track # stored to differentiate full vs empty
 - enqueues are at tail
@@ -80,12 +80,50 @@ push() example follows. we'll make space first to show both ordinary and wrappin
     [3, 4, 5, 6, 7, _, 1, 2]
                     t  h
 
+I also added eject() so we can add and remove from both ends, and are a full deque:
+
+    start
+    [3, 1, 2]
+        h
+        t
+
+    eject() -> 3
+    [_, 1, 2]
+     t  h
+
+    eject() -> 2
+    [_, 1, _]
+        h  t
+
 Other notes:
-- I didn't add removing from the tail but you could
 - __getitem__ (i.e., rb[index]) naturally supports peek() via rb[0]
 - with __len__, you can do rb[len(rb) - 1] to get the tail item
 - __iter__ is cool
 - added a few other dunder methods too
+- for space efficiency, you could easily
+    - grow by less than 2x
+    - add a shrink() to reduce excess storage
+
+Conceptually, this implements a deque using the operator names I find most intuitive:
+
+               front        back
+                 ↓           ↓
+                 | | | | | | |
+   push() --->   | | | | | | |  ---> eject()
+                 | | | | | | |
+    pop() <---   | | | | | | |  <--- enqueue()
+dequeue()
+
+For reference, here's python's deque operations:
+
+                front        back
+                  ↓           ↓
+                  | | | | | | |
+   popleft() ---> | | | | | | |  ---> pop()
+                  | | | | | | |
+appendleft() <--- | | | | | | |  <--- append()
+                  ↑           ↑
+                 [0]         [-1]
 """
 
 
@@ -135,13 +173,17 @@ class RingBuffer:
     def dequeue(self):
         """queue dequeue / stack pop (remove from head)"""
         if self.stored == 0:
-            print("WARNING: Tried to dequeue from empty")
+            print("WARNING: Tried to dequeue() from empty")
             return None
         item = self.ring[self.head]
         self.ring[self.head] = None
         self.head = (self.head + 1) % len(self.ring)
         self.stored -= 1
         return item
+
+    def pop(self):
+        """pop() is exactly the same as dequeue(). remove and return the head item."""
+        return self.dequeue()
 
     # adding push() so this also works like a stack. push() adds to top, at head.
 
@@ -154,6 +196,23 @@ class RingBuffer:
             self.head = len(self.ring) - 1
         self.ring[self.head] = item
         self.stored += 1
+
+    # if we add eject(), then we'll support adding and removing from both ends.
+
+    def eject(self):
+        """remove and return from tail."""
+        if self.stored == 0:
+            print("WARNING: Tried to eject() from empty")
+            return None
+        new_tail = self.tail - 1
+        if new_tail < 0:
+            # always valid el? yes: if this were empty, it would have been tail.
+            new_tail = len(self.ring) - 1
+        ret = self.ring[new_tail]
+        self.ring[new_tail] = None
+        self.tail = new_tail
+        self.stored -= 1
+        return ret
 
     # here's some dunder support to make this feel more like a first-class Python thing
 
@@ -227,6 +286,17 @@ def test_stack() -> None:
     print("test_stack() passed")
 
 
+def test_eject() -> None:
+    rb = RingBuffer(4)
+    for i in range(5):
+        rb.enqueue(i)
+    assert rb.eject() == 4
+    assert rb.eject() == 3
+    assert list(iter(rb)) == list(range(3))
+
+    print("test_eject() passed")
+
+
 def test_dunders() -> None:
     rb = RingBuffer(4)
 
@@ -277,7 +347,7 @@ def test_vs_reference(n_ops: int = 1000) -> None:
     dq = deque()
     stored = 0
 
-    operations = ["enqueue", "dequeue", "push", "len", "peek"]
+    operations = ["enqueue", "dequeue", "push", "eject", "len", "peek"]
     for _ in range(n_ops):
         op = random.choice(operations)
         # print(f"Testing op {_}/{n_ops}: {op}")
@@ -291,16 +361,22 @@ def test_vs_reference(n_ops: int = 1000) -> None:
             val1 = rb.dequeue()
             val2 = dq.popleft()
             assert val1 == val2
+        elif op == "push":
+            val = random.randint(0, n_ops * 10)
+            rb.push(val)
+            dq.appendleft(val)
+        elif op == "eject":
+            if stored == 0:
+                continue
+            val1 = rb.eject()
+            val2 = dq.pop()
+            assert val1 == val2
         elif op == "len":
             assert len(rb) == len(dq)
         elif op == "peek":
             if stored == 0:
                 continue
             assert rb[0] == dq[0]
-        elif op == "push":
-            val = random.randint(0, n_ops * 10)
-            rb.push(val)
-            dq.appendleft(val)
         else:
             assert False, f"unsupported op: {op}"
 
@@ -317,6 +393,7 @@ def test_vs_reference(n_ops: int = 1000) -> None:
 def main() -> None:
     test_basic()
     test_stack()
+    test_eject()
     test_dunders()
     test_vs_reference()
 
