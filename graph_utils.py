@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import os
 import random
 from typing import Optional, Literal
@@ -8,7 +9,35 @@ import networkx as nx
 NODE_SIZE = 800
 
 
-class GraphVisualizer:
+class GraphVisualizerSpec(ABC):
+    @abstractmethod
+    def __init__(
+        self,
+        graph: nx.Graph,
+        name: str,
+        layout: Literal["spring", "circular", "kamada"] = "kamada",
+    ):
+        pass
+
+    @abstractmethod
+    def draw(
+        self,
+        node_colors: dict[str, str] = {},
+        edge_colors: dict[tuple[str, str], str] = {},
+        node_labels: dict[str, str] = {},
+        edge_labels: dict[tuple[str, str], str] = {},
+        arrows: Optional[list[tuple[str, str]]] = None,
+        title: str = "",
+        save_path: Optional[str] = None,
+    ) -> None:
+        pass
+
+    @abstractmethod
+    def save_frame(self, output_dir: str, prefix: str, **kwargs) -> None:
+        pass
+
+
+class GraphVisualizer(GraphVisualizerSpec):
     """A simple API for visualizing graph algorithm steps."""
 
     __slots__ = ["graph", "name", "layout", "pos", "figure_count"]
@@ -170,7 +199,7 @@ class GraphVisualizer:
         else:
             plt.show()
 
-    def save_frame(self, output_dir: str, prefix: str, **kwargs):
+    def save_frame(self, output_dir: str, prefix: str, **kwargs) -> None:
         """Save a frame with automatic numbering."""
         filename = (
             f"{prefix}_{self.name}_{self.layout}_{self.figure_count:04d}.png"
@@ -178,7 +207,33 @@ class GraphVisualizer:
         filepath = os.path.join(output_dir, filename)
         self.figure_count += 1
         self.draw(save_path=filepath, **kwargs)
-        return filepath
+
+
+class DummyGraphVisualizer(GraphVisualizerSpec):
+    """Sometimes you don't wanna draw."""
+
+    def __init__(
+        self,
+        graph: nx.Graph,
+        name: str,
+        layout: Literal["spring", "circular", "kamada"] = "kamada",
+    ):
+        pass
+
+    def draw(
+        self,
+        node_colors: dict[str, str] = {},
+        edge_colors: dict[tuple[str, str], str] = {},
+        node_labels: dict[str, str] = {},
+        edge_labels: dict[tuple[str, str], str] = {},
+        arrows: Optional[list[tuple[str, str]]] = None,
+        title: str = "",
+        save_path: Optional[str] = None,
+    ) -> None:
+        pass
+
+    def save_frame(self, output_dir: str, prefix: str, **kwargs) -> None:
+        pass
 
 
 def create_fixed_graph() -> nx.Graph:

@@ -4,7 +4,9 @@ from typing import Optional
 import networkx as nx
 
 from graph_utils import (
+    GraphVisualizerSpec,
     GraphVisualizer,
+    DummyGraphVisualizer,
     create_fixed_graph,
     create_random_graph,
 )
@@ -39,7 +41,7 @@ def dijkstra(
     graph: nx.Graph[str],
     start: str,
     end: str,
-    visualizer: GraphVisualizer,
+    visualizer: GraphVisualizerSpec,
     output_dir: str,
 ):
     """
@@ -200,7 +202,10 @@ def main() -> None:
     #     create_random_graph(num_nodes=7, seed=seed),
     #     f"random-{seed}",
     # )
-    viz = GraphVisualizer(graph, name, layout="spring")
+
+    # viz or not
+    # viz = GraphVisualizer(graph, name, layout="spring")
+    viz = DummyGraphVisualizer(graph, name, layout="spring")
     output_dir = "output/dijkstra/"
 
     start = list(graph.nodes())[0]
@@ -211,7 +216,8 @@ def main() -> None:
     print("Distances:", distances)
     print("Previous:", previous)
     print("Path:", get_path(previous, end))
-    print(f"Frames for {name} graph saved to: {output_dir}")
+    if isinstance(viz, GraphVisualizer):
+        print(f"Frames for {name} graph saved to: {output_dir}")
 
 
 if __name__ == "__main__":
